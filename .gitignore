@@ -41,6 +41,7 @@ typings/
 
 # Optional npm cache directory
 .npm
+package-lock.json
 
 # Optional eslint cache
 .eslintcache
@@ -59,3 +60,4 @@ typings/
 
 # next.js build output
 .next
+

@@ -4,11 +4,16 @@
   "description": "",
   "main": "getv.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node ./getv.js --update",
+    "sort": "node ./getv.js --sort 07-10-2018",
+    "print": "node ./getv.js"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "request": "^2.87.0"
+  },
+  "dependencies": {
+    "dateformat": "^3.0.3"
   }
 }
