@@ -21,10 +21,15 @@ const
     BASE_URL = 'https://www.indeed.ca/',
     DATA_FILE = './getv.json';
 
+// <div id="searchCount">Page 1 of 6,743 jobs</div>
+let SEARCH_COUNT = /<div[^>]+searchCount[^>]*>[^<]+\s([^<]+)\s+jobs\s*</; 
+
+
 let UPDATE = process.argv.indexOf('--update')>0;
 let SORT = process.argv.indexOf('--sort');
 SORT = (SORT>0) && process.argv[SORT+1];
 
+//---------------------------
 
 // --- run ---
 let Data = require(DATA_FILE);
@@ -78,8 +83,12 @@ function update(DATE) {
     return Data.reduce((next, item)=>next
         .then(()=>get_count(item.name))
         .then(count => {
-            item[DATE]=item[DATE]||{};
-            item[DATE].count = count;
+            if(count) {
+                item[DATE]=item[DATE]||{};
+                item[DATE].count = count;
+            }
+            if (isNaN(count))
+                console.warn('Can\'t find "searchCount", try to change regexp');
             console.log(item.name,count);
         }), 
         new Promise(resolve=>resolve())
@@ -87,8 +96,6 @@ function update(DATE) {
 }
 
 
-// <div id="searchCount"> Jobs 1 to 20 of 90</div>
-let SearchCount = /<div[^>]+searchCount[^>]*>[^<]+\s([,0-9]+)</; // /<div[^>]+searchCount[^>]*>[^<]+\s([,0..9]+)</;
 
 // https://www.indeed.ca/DevOps-jobs
 // what = DevOps
@@ -101,7 +108,7 @@ function get_count(what){
                 return;
             }
             
-            let count = SearchCount.exec(body);
+            let count = SEARCH_COUNT.exec(body);
             count = parseInt(count && count[1].replace(/,/g,''));
             
             resolve(count);
