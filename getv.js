@@ -57,15 +57,28 @@ function print() {
     console.log('--------------------------');
 
     Data.forEach(item => {
-        let TAB_L = 8;
-        let out = item.name + (item.name.length<TAB_L?'\t':'') + (item.name.length<2*TAB_L?'\t':'') + (item.name.length<3*TAB_L?'\t':'');
-        for (let i=0; i<headers.length; i++)
-            if (headers[i]!='name')
-                out += (item[headers[i]].count||' ') + '\t\t';
+        let out = shift(item.name, 3)
+        for (let i=0; i<headers.length; i++){
+            let val = item[headers[i]].count ||0;
+            let prev = item[headers[i-1]];
+            prev = prev && prev.count ||0;
+            let per = (val&&prev)? Math.round(100*(val-prev)/prev): 0;
+            if (per>0) per = '+' + per;
+            
+            if (headers[i] != 'name')
+                out += shift((val||' ') + '' + (per||''), 2);
+        }
         console.log(out);
     })
     
+    function shift(str, count) {
+        count = count - Math.floor(str.length / 8); // TAB length
+        for (let i=0; i<count; i++)
+            str += '\t';
+        return str;
+    }
 }
+
 
 // --- implementation ---
 function sort(field) {
