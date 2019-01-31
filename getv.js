@@ -56,13 +56,26 @@ function print() {
     console.log('\t\t' + headers.join('\t'));
     console.log('--------------------------');
 
+    // calc vacations counts
+    let counts = [];
     Data.forEach(item => {
         let out = shift(item.name, 3)
         for (let i=0; i<headers.length; i++){
-            let val = item[headers[i]].count ||0;
+            let val = item[headers[i]] && item[headers[i]].count ||0;
+            counts[i] = counts[i]||0 + val;
+        }
+    })
+    
+    Data.forEach(item => {
+        let out = shift(item.name, 3)
+        for (let i=0; i<headers.length; i++){
+            let val = item[headers[i]] && item[headers[i]].count ||0;
             let prev = item[headers[i-1]];
             prev = prev && prev.count ||0;
+            let count = counts[i];
+            let count_prev = counts[i-1]||0;
             let per = (val&&prev)? Math.round(100*(val-prev)/prev): 0;
+            // let per = (val&&prev)? Math.round(100*(val/count-prev/count_prev)/(prev/count_prev)): 0;
             if (per>0) per = '+' + per;
             
             if (headers[i] != 'name')
