@@ -45,7 +45,6 @@ else if (SORT) {
 else
     print()
 
-
 function print() {
     let headers = ['name'];
     Data.forEach(item => {
@@ -53,6 +52,12 @@ function print() {
             if (!headers.includes(p))
                 headers.push(p)
     });
+    headers.sort((a,b)=>{ // 31-01-2019	<> 09-04-2019
+        a = a.split('-');
+        b = b.split('-');
+        return (a[2]-b[2])*32*16 + (a[1]-b[1])*32 + a[0]-b[0];
+    })
+    
     console.log('\t\t' + headers.join('\t'));
     console.log('--------------------------');
 
@@ -100,7 +105,9 @@ function sort(field) {
 }
 
 function save() {
-    fs.writeFile(DATA_FILE, JSON.stringify(Data,0,'\t'), 'utf8');
+    fs.writeFile(DATA_FILE, JSON.stringify(Data,0,'\t'), 'utf8', ()=>{
+        console.log('saved to', DATA_FILE);
+    });
 }
 
 // update for today
