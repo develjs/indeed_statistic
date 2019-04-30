@@ -27,7 +27,7 @@ let SEARCH_COUNT = /<div[^>]+searchCount[^>]*>[^<]+\s([^<]+)\s+jobs\s*</;
 
 let UPDATE = process.argv.indexOf('--update')>0;
 let SORT = process.argv.indexOf('--sort');
-SORT = (SORT>0) && process.argv[SORT+1];
+let SORT_DATE = (SORT>0) && process.argv[SORT+1];
 
 //---------------------------
 
@@ -38,25 +38,15 @@ if (UPDATE)
     .then(_ => {
         save()
     });
-else if (SORT) {
-    sort(SORT)
+else if (SORT>0) {
+    sort(SORT_DATE)
     save()
 }
 else
     print()
 
 function print() {
-    let headers = ['name'];
-    Data.forEach(item => {
-        for (p in item)
-            if (!headers.includes(p))
-                headers.push(p)
-    });
-    headers.sort((a,b)=>{ // 31-01-2019	<> 09-04-2019
-        a = a.split('-');
-        b = b.split('-');
-        return (a[2]-b[2])*32*16 + (a[1]-b[1])*32 + a[0]-b[0];
-    })
+    let headers = getHeaders();
     
     console.log('\t\t' + headers.join('\t'));
     console.log('--------------------------');
@@ -97,11 +87,30 @@ function print() {
     }
 }
 
+// get sorted headers
+function getHeaders(){
+    let headers = ['name'];
+    Data.forEach(item => {
+        for (p in item)
+            if (!headers.includes(p))
+                headers.push(p)
+    });
+    headers.sort((a,b)=>{ // 31-01-2019	<> 09-04-2019
+        a = a.split('-');
+        b = b.split('-');
+        return (a[2]-b[2])*32*16 + (a[1]-b[1])*32 + a[0]-b[0];
+    })
+    return headers;
+}
 
 // --- implementation ---
 function sort(field) {
-    console.log('sort by', SORT);
-    Data = Data.sort((a,b)=>(parseInt(b[field].count)||0) - (parseInt(a[field].count)||0))
+    if (!field) {
+        field = getHeaders().pop();
+    }
+    
+    console.log('sort by', field);
+    Data = Data.sort((a,b)=>(b[field] && parseInt(b[field].count)||0) - (a[field] && parseInt(a[field].count)||0))
 }
 
 function save() {

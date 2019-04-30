@@ -7,6 +7,7 @@ yarn-error.log*
 .tern-project
 .tern-port
 *.workspace
+.codelite
 
 # Runtime data
 pids

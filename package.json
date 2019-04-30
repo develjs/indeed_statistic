@@ -5,7 +5,7 @@
   "main": "getv.js",
   "scripts": {
     "start": "node ./getv.js --update",
-    "sort": "node ./getv.js --sort 09-04-2019",
+    "sort": "node ./getv.js --sort",
     "print": "node ./getv.js"
   },
   "author": "",
