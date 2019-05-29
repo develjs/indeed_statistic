@@ -15,19 +15,18 @@ const
     request = require('request'),
     fs = require('fs'),
     process = require('process'),
-    dateFormat = require('dateformat');
+    dateFormat = require('dateformat'),
+    parser  = require('node-html-parser');
+
 
 const 
     BASE_URL = 'https://www.indeed.ca/',
     DATA_FILE = './getv.json';
 
-// <div id="searchCount">Page 1 of 6,743 jobs</div>
-let SEARCH_COUNT = /<div[^>]+searchCount[^>]*>[^<]+\s([^<]+)\s+jobs\s*</; 
-
 
 let UPDATE = process.argv.indexOf('--update')>0;
 let SORT = process.argv.indexOf('--sort');
-let SORT_DATE = (SORT>0) && process.argv[SORT+1];
+let GET = process.argv.indexOf('--get');
 
 //---------------------------
 
@@ -38,8 +37,14 @@ if (UPDATE)
     .then(_ => {
         save()
     });
+else if (GET>0){
+    let name = process.argv[GET+1];
+    get_count(name).then(({name,count,salary})=>{
+        console.log(name,count,salary)
+    })
+}
 else if (SORT>0) {
-    sort(SORT_DATE)
+    sort(process.argv[SORT+1])
     save()
 }
 else
@@ -62,8 +67,8 @@ function print() {
     })
     
     Data.forEach(item => {
-        let out = shift(item.name, 3)
-        for (let i=0; i<headers.length; i++){
+        let out = shift(item.name, 3)   // name
+        for (let i=0; i<headers.length; i++) {
             let val = item[headers[i]] && item[headers[i]].count ||0;
             let prev = item[headers[i-1]];
             prev = prev && prev.count ||0;
@@ -124,14 +129,16 @@ function update(DATE) {
     console.log(DATE);
     return Data.reduce((next, item)=>next
         .then(()=>get_count(item.name))
-        .then(count => {
-            if(count) {
+        .then(({count, salary}) => {
+            if (count) {
                 item[DATE]=item[DATE]||{};
                 item[DATE].count = count;
+                if (salary) item[DATE].salary = salary;
             }
             if (isNaN(count))
-                console.warn('Can\'t find "searchCount", try to change regexp');
-            console.log(item.name,count);
+                console.warn('Can\'t find "searchCount"');
+                
+            console.log(item.name, count, salary);
         }), 
         new Promise(resolve=>resolve())
     )
@@ -140,20 +147,48 @@ function update(DATE) {
 
 
 // https://www.indeed.ca/DevOps-jobs
-// what = DevOps
-function get_count(what){
+// @param name = DevOps
+function get_count(name){
+    
     return new Promise((resolve,reject)=>{
-        request(`${BASE_URL}jobs?q=${encodeURI(what)}&l=`, function (error, response, body) { //'https://www.indeed.ca/jobs?q=DevOps&l=', function (res) { // 
+        request(`${BASE_URL}jobs?q=${encodeURI(name)}&l=`, function (error, response, body) { //'https://www.indeed.ca/jobs?q=DevOps&l=', function (res) { // 
             if (error){
                 console.error(error);
                 reject('');
                 return;
             }
             
-            let count = SEARCH_COUNT.exec(body);
+            const root = parser.parse(body);
+            
+            // <div id="searchCount">Page 1 of 6,743 jobs</div>
+            let count = root.querySelector('#searchCount').childNodes[0].rawText;
+            count = /(\S+)\s+jobs/.exec(count);
             count = parseInt(count && count[1].replace(/,/g,''));
             
-            resolve(count);
+            // #SALARY_rbo ul li .rbLabel
+            // #SALARY_rbo ul li .rbCount
+            let sValue=[], sCount=[];
+            try {
+                sValue = root.querySelectorAll('#SALARY_rbo ul li .rbLabel').map(node=>parseInt(node.childNodes[0].rawText.replace(/\D/g,'')));
+                sCount = root.querySelectorAll('#SALARY_rbo ul li .rbCount').map(node=>parseInt(node.childNodes[0].rawText.replace(/\D/g,'')));
+            }
+            catch(e) {
+                console.log('cannot find salary');
+                console.error(e);
+            }
+            
+            let salary = Math.round( sValue.reduce(
+                ({sum, count}, valueX, index) => {
+                    let countX = sCount[index]||0;
+                    return {
+                        sum: (sum * count + valueX * countX) / (count+countX),
+                        count: count + countX
+                    }
+                },
+                {sum:0, count:0}
+            ).sum);
+            
+            resolve({name, count, salary});
         });    
     });
 }
