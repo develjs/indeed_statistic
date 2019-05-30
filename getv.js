@@ -1,7 +1,4 @@
 /**
- * todo: use cheerio.load
- * add  Salary
- * 
  * --- *.json ---
  * [{
  *      name: "skill",
@@ -24,31 +21,46 @@ const
     DATA_FILE = './getv.json';
 
 
-let UPDATE = process.argv.indexOf('--update')>0;
+let UPDATE = process.argv.indexOf('--update');
 let SORT = process.argv.indexOf('--sort');
 let GET = process.argv.indexOf('--get');
-
+let SAVE = process.argv.indexOf('--save');
+let REMOVE = process.argv.indexOf('--remove');
 //---------------------------
 
 // --- run ---
 let Data = require(DATA_FILE);
-if (UPDATE)
-    update(dateFormat(new Date(), "dd-mm-yyyy"))
+const CUR_DATE = dateFormat(new Date(), "dd-mm-yyyy");
+
+if (UPDATE>0)
+    update(CUR_DATE)
     .then(_ => {
         save()
     });
 else if (GET>0){
-    let name = process.argv[GET+1];
-    get_count(name).then(({name,count,salary})=>{
-        console.log(name,count,salary)
+    get_count(process.argv[GET+1])
+    .then(({name,count,salary})=>{
+        if (SAVE>0) {
+            update_item(name, {count, salary}, CUR_DATE);
+            save()
+        }
     })
 }
 else if (SORT>0) {
     sort(process.argv[SORT+1])
     save()
 }
+else if (REMOVE>0){
+    let data = process.argv[REMOVE+1]
+    Data.forEach(item=>{
+        if (data in item) delete item[data];
+    });
+    
+    save();
+}
 else
     print()
+    
 
 function print() {
     let headers = getHeaders();
@@ -119,31 +131,39 @@ function sort(field) {
 }
 
 function save() {
-    fs.writeFile(DATA_FILE, JSON.stringify(Data,0,'\t'), 'utf8', ()=>{
+    fs.writeFile(DATA_FILE, JSON.stringify(Data, 0,'\t'), 'utf8', ()=>{
         console.log('saved to', DATA_FILE);
     });
 }
 
-// update for today
+// update all
 function update(DATE) {
     console.log(DATE);
     return Data.reduce((next, item)=>next
         .then(()=>get_count(item.name))
         .then(({count, salary}) => {
-            if (count) {
-                item[DATE]=item[DATE]||{};
-                item[DATE].count = count;
-                if (salary) item[DATE].salary = salary;
-            }
-            if (isNaN(count))
-                console.warn('Can\'t find "searchCount"');
-                
-            console.log(item.name, count, salary);
+            update_item(item, {count, salary}, DATE)
         }), 
         new Promise(resolve=>resolve())
     )
 }
 
+function update_item(item, {count, salary}, DATE){
+    if (typeof item == 'string') { // if name was sent
+        let name = item;
+        item = Data.filter(item=>item.name.toLowerCase().trim()==name.toLowerCase().trim())[0];
+        if (!item) {
+            item = { name };
+            Data.push(item);
+        }
+    }
+    
+    if (count) {
+        item[DATE]=item[DATE]||{};
+        item[DATE].count = count;
+        if (salary) item[DATE].salary = salary;
+    }
+}
 
 
 // https://www.indeed.ca/DevOps-jobs
@@ -164,6 +184,9 @@ function get_count(name){
             let count = root.querySelector('#searchCount').childNodes[0].rawText;
             count = /(\S+)\s+jobs/.exec(count);
             count = parseInt(count && count[1].replace(/,/g,''));
+            if (isNaN(count))
+                console.warn('Can\'t find "searchCount"');
+
             
             // #SALARY_rbo ul li .rbLabel
             // #SALARY_rbo ul li .rbCount
@@ -188,6 +211,7 @@ function get_count(name){
                 {sum:0, count:0}
             ).sum);
             
+            console.log(name, count, salary);
             resolve({name, count, salary});
         });    
     });
