@@ -7,6 +7,7 @@
  *          salary: xxx
  *      }
  * }]
+ * @todo: use highcharts
  */
 const 
     request = require('request'),
