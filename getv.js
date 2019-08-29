@@ -18,7 +18,6 @@ const
 
 
 const 
-    BASE_URL = 'https://www.indeed.ca/',
     DATA_FILE = './getv.json';
 
 
@@ -27,44 +26,74 @@ let SORT = process.argv.indexOf('--sort');
 let GET = process.argv.indexOf('--get');
 let SAVE = process.argv.indexOf('--save');
 let REMOVE = process.argv.indexOf('--remove');
+let COUNTRY = process.argv.indexOf('--country');
 //---------------------------
 
 // --- run ---
 let Data = require(DATA_FILE);
 const CUR_DATE = dateFormat(new Date(), "dd-mm-yyyy");
 
-if (UPDATE>0)
-    update(CUR_DATE)
-    .then(_ => {
-        save()
-    });
-else if (GET>0){
-    get_count(process.argv[GET+1])
-    .then(({name,count,salary})=>{
-        if (SAVE>0) {
-            update_item(name, {count, salary}, CUR_DATE);
-            save()
+let proc = Promise.resolve();
+if (COUNTRY>0) {
+    let DataItem = Data[process.argv[COUNTRY+1]];
+    proc = proc
+    .then(()=>main(DataItem.data, DataItem.url));
+}
+else {
+    for (let country in Data) {
+        if (Data[country].data) {
+            let DataItem = Data[country];
+            proc = proc
+            .then(()=>{
+                console.log('--------------------------');
+                console.log('info for ' + country);
+            })
+            .then(()=>main(DataItem.data, DataItem.url));
         }
-    })
+    }
 }
-else if (SORT>0) {
-    sort(process.argv[SORT+1])
-    save()
+
+proc.then(()=>{
+    save();
+})
+
+
+// handle operations
+function main(Data, BASE_URL) {
+    
+    if (UPDATE>0) {
+        return update(CUR_DATE, Data, BASE_URL);
+    }
+    else if (GET>0) {
+        return get_count(process.argv[GET+1], BASE_URL)
+            .then(({name,count,salary}) => {
+                if (SAVE>0) {
+                    update_item(name, {count, salary}, CUR_DATE, Data);
+                }
+            });
+    }
+    else if (SORT>0) {
+        let field = process.argv[SORT+1];
+        if (field && field.startsWith('--')) field = '';
+        sort(field, Data);
+    }
+    else if (REMOVE>0) {
+        remove(process.argv[REMOVE+1], Data);
+    }
+    else {
+        print(Data)
+    }
 }
-else if (REMOVE>0){
-    let data = process.argv[REMOVE+1]
+
+
+function remove(data, Data) {
     Data.forEach(item=>{
         if (data in item) delete item[data];
     });
-    
-    save();
-}
-else
-    print()
-    
+}    
 
-function print() {
-    let headers = getHeaders();
+function print(Data) {
+    let headers = getHeaders(Data);
     
     console.log('\t\t' + headers.join('\t'));
     console.log('--------------------------');
@@ -106,7 +135,7 @@ function print() {
 }
 
 // get sorted headers
-function getHeaders(){
+function getHeaders(Data){
     let headers = ['name'];
     Data.forEach(item => {
         for (p in item)
@@ -122,9 +151,10 @@ function getHeaders(){
 }
 
 // --- implementation ---
-function sort(field) {
-    if (!field) {
-        field = getHeaders().pop();
+function sort(field, Data) {
+    let fields = getHeaders(Data);
+    if (!fields.includes(field)) {
+        field = fields.pop();
     }
     
     console.log('sort by', field);
@@ -132,24 +162,32 @@ function sort(field) {
 }
 
 function save() {
-    fs.writeFile(DATA_FILE, JSON.stringify(Data, 0,'\t'), 'utf8', ()=>{
-        console.log('saved to', DATA_FILE);
-    });
+    return new Promise((resolve)=>{
+        fs.writeFile(DATA_FILE, JSON.stringify(Data, 0,'\t'), 'utf8', ()=>{
+            console.log('saved to', DATA_FILE);
+            resolve();
+        });
+    })
 }
 
 // update all
-function update(DATE) {
+function update(DATE, Data, BASE_URL) {
     console.log(DATE);
-    return Data.reduce((next, item)=>next
-        .then(()=>get_count(item.name))
+    let proc = new Promise(resolve=>resolve());
+    Data.forEach((item)=>{
+        proc = proc
+        .then(()=>get_count(item.name, BASE_URL))
         .then(({count, salary}) => {
-            update_item(item, {count, salary}, DATE)
-        }), 
-        new Promise(resolve=>resolve())
-    )
+            update_item(item, {count, salary}, DATE, Data)
+        })
+    });
+    proc = proc.then(()=>{
+        console.log('done update')
+    })
+    return proc;
 }
 
-function update_item(item, {count, salary}, DATE){
+function update_item(item, {count, salary}, DATE, Data){
     if (typeof item == 'string') { // if name was sent
         let name = item;
         item = Data.filter(item=>item.name.toLowerCase().trim()==name.toLowerCase().trim())[0];
@@ -169,7 +207,7 @@ function update_item(item, {count, salary}, DATE){
 
 // https://www.indeed.ca/DevOps-jobs
 // @param name = DevOps
-function get_count(name){
+function get_count(name, BASE_URL){
     
     return new Promise((resolve,reject)=>{
         request(`${BASE_URL}jobs?q=${encodeURI(name)}&l=`, function (error, response, body) { //'https://www.indeed.ca/jobs?q=DevOps&l=', function (res) { // 
