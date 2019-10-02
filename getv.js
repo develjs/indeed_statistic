@@ -7,6 +7,7 @@
  *          salary: xxx
  *      }
  * }]
+ * d3-node
  */
 const 
     request = require('request'),
@@ -65,13 +66,12 @@ else
 function print() {
     let headers = getHeaders();
     
-    console.log('\t\t' + headers.join('\t'));
+    console.log(shift('', 1) + headers.map(header=>shift(header, 2)).join('|'))
     console.log('--------------------------');
 
     // calc vacations counts
     let counts = [];
     Data.forEach(item => {
-        let out = shift(item.name, 3)
         for (let i=0; i<headers.length; i++){
             let val = item[headers[i]] && item[headers[i]].count ||0;
             counts[i] = counts[i]||0 + val;
@@ -79,7 +79,7 @@ function print() {
     })
     
     Data.forEach(item => {
-        let out = shift(item.name, 3)   // name
+        let out = shift(item.name, 3)+'|'   // name
         for (let i=0; i<headers.length; i++) {
             let val = item[headers[i]] && item[headers[i]].count ||0;
             let prev = item[headers[i-1]];
@@ -91,15 +91,13 @@ function print() {
             if (per>0) per = '+' + per;
             
             if (headers[i] != 'name')
-                out += shift((val||' ') + '' + (per||''), 2);
+                out += shift((val||' ') + '' + (per||''), 2)+'|';
         }
         console.log(out);
     })
     
     function shift(str, count) {
-        count = count - Math.floor(str.length / 8); // TAB length
-        for (let i=0; i<count; i++)
-            str += '\t';
+        while (str.length<count*8) str+=' ';
         return str;
     }
 }
