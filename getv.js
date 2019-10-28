@@ -7,7 +7,9 @@
  *          salary: xxx
  *      }
  * }]
- * @todo: use highcharts
+ * @todo use Highcharts
+ * @todo extract new skills
+ * @todo group by relations
  */
 const 
     request = require('request'),
@@ -220,8 +222,8 @@ function get_count(name, BASE_URL){
             const root = parser.parse(body);
             
             // <div id="searchCount">Page 1 of 6,743 jobs</div>
-            let count = root.querySelector('#searchCount').childNodes[0].rawText;
-            count = /(\S+)\s+jobs/.exec(count);
+            let count = root.querySelector('#searchCountPages').childNodes[0].rawText;
+            count = /(\S+)\s*jobs/.exec(count);
             count = parseInt(count && count[1].replace(/,/g,''));
             if (isNaN(count))
                 console.warn('Can\'t find "searchCount"');
