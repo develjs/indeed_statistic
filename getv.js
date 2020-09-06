@@ -1,100 +1,116 @@
+/*
+ getv.js {[--update] | [--get <skill> [--save]] | [--sort <field/date>] | [--remove <date>]} [--country <USA|Canada>]
+
+    --update - download new data and append
+    --sort - sort data in DB by <date>
+    --get - fetch defined <skill>
+    --save - save fetched data
+    --remove - remove date data
+    --country - process only one country
+    default behavior - print data
+ */
+
 /**
  * --- *.json ---
- * [{
- *      name: "skill",
- *      "DD-MM-YYYY": {
- *          count: xxx,
- *          salary: xxx
- *      }
- * }]
+ * { 
+ *    "Contry": {
+ *      "url": "https://www.indeed.com/",
+ *      "data": [{
+ *          name: "skill",
+ *          "DD-MM-YYYY": {
+ *              count: xxx,     
+ *              salary: xxx
+ *          }
+ *      }]
+ *   }
+ * }
+ * @todo extract Model
+ * @todo use DB
  * @todo use Highcharts
  * @todo extract new skills
  * @todo group by relations
  */
 const 
-    request = require('request'),
     fs = require('fs'),
     process = require('process'),
     dateFormat = require('dateformat'),
-    parser  = require('node-html-parser');
+    fetchStat = require('./fetch-stat.js');
 
 
 const 
     DATA_FILE = './getv.json';
 
 
+// actions
 let UPDATE = process.argv.indexOf('--update');
 let SORT = process.argv.indexOf('--sort');
 let GET = process.argv.indexOf('--get');
 let SAVE = process.argv.indexOf('--save');
 let REMOVE = process.argv.indexOf('--remove');
+// params
 let COUNTRY = process.argv.indexOf('--country');
 //---------------------------
 
 // --- run ---
-let Data = require(DATA_FILE);
-const CUR_DATE = dateFormat(new Date(), "dd-mm-yyyy");
+main();
 
-let proc = Promise.resolve();
-if (COUNTRY>0) {
-    let DataItem = Data[process.argv[COUNTRY+1]];
-    proc = proc
-    .then(()=>main(DataItem.data, DataItem.url));
-}
-else {
-    for (let country in Data) {
-        if (Data[country].data) {
-            let DataItem = Data[country];
-            proc = proc
-            .then(()=>{
-                console.log('--------------------------');
-                console.log('info for ' + country);
-            })
-            .then(()=>main(DataItem.data, DataItem.url));
+async function main() {
+    const CUR_DATE = dateFormat(new Date(), "dd-mm-yyyy");
+    const Data = require(DATA_FILE);
+    
+    let processData = Data;
+
+    if (COUNTRY > 0) {
+        const country = process.argv[COUNTRY+1];
+
+        processData = {
+            [country]: Data[country]
         }
     }
-}
 
-proc.then(()=>{
-    save();
-})
+    for (const country of Object.keys(Data)) {
+        const DataItem = Data[country];
+        if (!DataItem.data) continue;
+        const data = DataItem.data;
 
+        // handle operations, process_country
+        console.log('--------------------------');
+        console.log('info for ' + country);
 
-// handle operations
-function main(Data, BASE_URL) {
+        if (UPDATE>0) {
+            await update_all(CUR_DATE, data, country);
+        }
+        else if (GET>0) {
+            const {name,count,salary} = await get_count(process.argv[GET+1], country);
+                
+            if (SAVE>0) {
+                update_item(name, {count, salary}, CUR_DATE, data);
+            }
+        }
+        else if (SORT>0) {
+            let field = process.argv[SORT+1];
+            if (field && field.startsWith('--')) field = '';
+            sort_by_field(field, data);
+        }
+        else if (REMOVE>0) {
+            remove_date(process.argv[REMOVE+1], data);
+        }
+        else {
+            print_all(data)
+        }
+    }
     
-    if (UPDATE>0) {
-        return update(CUR_DATE, Data, BASE_URL);
-    }
-    else if (GET>0) {
-        return get_count(process.argv[GET+1], BASE_URL)
-            .then(({name,count,salary}) => {
-                if (SAVE>0) {
-                    update_item(name, {count, salary}, CUR_DATE, Data);
-                }
-            });
-    }
-    else if (SORT>0) {
-        let field = process.argv[SORT+1];
-        if (field && field.startsWith('--')) field = '';
-        sort(field, Data);
-    }
-    else if (REMOVE>0) {
-        remove(process.argv[REMOVE+1], Data);
-    }
-    else {
-        print(Data)
-    }
+    await save(Data);
 }
 
-
-function remove(data, Data) {
+// ---------------------------
+function remove_date(date, Data) {
     Data.forEach(item=>{
-        if (data in item) delete item[data];
+        if (date in item) delete item[date];
     });
 }    
 
-function print(Data) {
+function print_all(Data) {
     let headers = getHeaders(Data);
     
     console.log('\t\t' + headers.join('\t'));
@@ -153,7 +169,7 @@ function getHeaders(Data){
 }
 
 // --- implementation ---
-function sort(field, Data) {
+function sort_by_field(field, Data) {
     let fields = getHeaders(Data);
     if (!fields.includes(field)) {
         field = fields.pop();
@@ -163,7 +179,7 @@ function sort(field, Data) {
     Data = Data.sort((a,b)=>(b[field] && parseInt(b[field].count)||0) - (a[field] && parseInt(a[field].count)||0))
 }
 
-function save() {
+function save(Data) {
     return new Promise((resolve)=>{
         fs.writeFile(DATA_FILE, JSON.stringify(Data, 0,'\t'), 'utf8', ()=>{
             console.log('saved to', DATA_FILE);
@@ -173,12 +189,12 @@ function save() {
 }
 
 // update all
-function update(DATE, Data, BASE_URL) {
+function update_all(DATE, Data, country) {
     console.log(DATE);
     let proc = new Promise(resolve=>resolve());
     Data.forEach((item)=>{
         proc = proc
-        .then(()=>get_count(item.name, BASE_URL))
+        .then(()=>get_count(item.name, country))
         .then(({count, salary}) => {
             update_item(item, {count, salary}, DATE, Data)
         })
@@ -206,54 +222,10 @@ function update_item(item, {count, salary}, DATE, Data){
     }
 }
 
-
-// https://www.indeed.ca/DevOps-jobs
-// @param name = DevOps
-function get_count(name, BASE_URL){
+async function get_count(name, country) {
+    const stat = await fetchStat[country](name);
     
-    return new Promise((resolve,reject)=>{
-        request(`${BASE_URL}jobs?q=${encodeURI(name)}&l=`, function (error, response, body) { //'https://www.indeed.ca/jobs?q=DevOps&l=', function (res) { // 
-            if (error){
-                console.error(error);
-                reject('');
-                return;
-            }
-            
-            const root = parser.parse(body);
-            
-            // <div id="searchCount">Page 1 of 6,743 jobs</div>
-            let count = root.querySelector('#searchCountPages').childNodes[0].rawText;
-            count = /(\S+)\s*jobs/.exec(count);
-            count = parseInt(count && count[1].replace(/,/g,''));
-            if (isNaN(count))
-                console.warn('Can\'t find "searchCount"');
+    console.log(stat);
 
-            
-            // #SALARY_rbo ul li .rbLabel
-            // #SALARY_rbo ul li .rbCount
-            let sValue=[], sCount=[];
-            try {
-                sValue = root.querySelectorAll('#SALARY_rbo ul li .rbLabel').map(node=>parseInt(node.childNodes[0].rawText.replace(/\D/g,'')));
-                sCount = root.querySelectorAll('#SALARY_rbo ul li .rbCount').map(node=>parseInt(node.childNodes[0].rawText.replace(/\D/g,'')));
-            }
-            catch(e) {
-                console.log('cannot find salary');
-                console.error(e);
-            }
-            
-            let salary = Math.round( sValue.reduce(
-                ({sum, count}, valueX, index) => {
-                    let countX = sCount[index]||0;
-                    return {
-                        sum: (sum * count + valueX * countX) / (count+countX),
-                        count: count + countX
-                    }
-                },
-                {sum:0, count:0}
-            ).sum);
-            
-            console.log(name, count, salary);
-            resolve({name, count, salary});
-        });    
-    });
+    return stat;
 }
