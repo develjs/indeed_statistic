@@ -34,6 +34,7 @@ const
     fs = require('fs'),
     process = require('process'),
     dateFormat = require('dateformat'),
+    {printText, printHtml} = require('./lib/output.js'),
     fetchStat = require('./fetch-stat.js');
 
 
@@ -42,34 +43,49 @@ const
 
 
 // actions
-let UPDATE = process.argv.indexOf('--update');
-let SORT = process.argv.indexOf('--sort');
-let GET = process.argv.indexOf('--get');
-let SAVE = process.argv.indexOf('--save');
-let REMOVE = process.argv.indexOf('--remove');
-// params
-let COUNTRY = process.argv.indexOf('--country');
+
 //---------------------------
 
-// --- run ---
-main();
+function getArgs() {
+    let SORT = process.argv.indexOf('--sort');
+    let GET = process.argv.indexOf('--get');
+    let REMOVE = process.argv.indexOf('--remove');
+    let COUNTRY = process.argv.indexOf('--country');
 
-async function main() {
+    return {
+        update: (process.argv.indexOf('--update')>0),
+        country: (COUNTRY > 0? process.argv[COUNTRY+1] : ''),
+        get: (GET>0 ? process.argv[GET+1] : ''),
+        save: (process.argv.indexOf('--save')>0),
+        sort: (SORT>0? process.argv[SORT+1]: ''),
+        remove: (REMOVE>0 ? process.argv[REMOVE+1]: ''),
+        debug: (process.argv.indexOf('--debug')>0),
+        print: (process.argv.indexOf('--print')>0),
+        html: (process.argv.indexOf('--html')>0),
+    };
+}
+
+function help() {
+    console.log('getv.js {[--update] | [--get <skill> [--save]] | [--sort <field/date>] | [--remove <date>]} [--country <USA|Canada>]')
+}
+
+// --- run ---
+main(getArgs());
+
+async function main({country, update, get, save: SAVE, sort, remove, debug, print, html}) {
     const CUR_DATE = dateFormat(new Date(), "dd-mm-yyyy");
     const Data = require(DATA_FILE);
     
     let processData = Data;
 
-    if (COUNTRY > 0) {
-        const country = process.argv[COUNTRY+1];
-
+    if (country) {
         processData = {
             [country]: Data[country]
         }
     }
 
-    for (const country of Object.keys(Data)) {
-        const DataItem = Data[country];
+    for (const country of Object.keys(processData)) {
+        const DataItem = processData[country];
         if (!DataItem.data) continue;
         const data = DataItem.data;
 
@@ -77,30 +93,38 @@ async function main() {
         console.log('--------------------------');
         console.log('info for ' + country);
 
-        if (UPDATE>0) {
+        if (update) {
             await update_all(CUR_DATE, data, country);
+            await save(Data);
         }
-        else if (GET>0) {
-            const {name,count,salary} = await get_count(process.argv[GET+1], country);
+        else if (get) {
+            const {name,count,salary} = await get_count(get, country, debug);
                 
-            if (SAVE>0) {
+            if (SAVE) {
                 update_item(name, {count, salary}, CUR_DATE, data);
+                await save(Data);
             }
         }
-        else if (SORT>0) {
-            let field = process.argv[SORT+1];
+        else if (sort) {
+            let field = sort;
             if (field && field.startsWith('--')) field = '';
             sort_by_field(field, data);
+            await save(Data);
         }
-        else if (REMOVE>0) {
-            remove_date(process.argv[REMOVE+1], data);
+        else if (remove) {
+            remove_date(remove, data);
+            await save(Data);
         }
-        else {
+        else if (print) {
             print_all(data)
         }
+        else if (html) {
+            print_html(data)
+        }
+        else {
+            help()
+        }
     }
-    
-    await save(Data);
 }
 
 // ---------------------------
@@ -112,44 +136,13 @@ function remove_date(date, Data) {
 
 function print_all(Data) {
     let headers = getHeaders(Data);
-    
-    console.log('\t\t' + headers.join('\t'));
-    console.log('--------------------------');
+    printText(headers, Data);
+}
 
-    // calc vacations counts
-    let counts = [];
-    Data.forEach(item => {
-        let out = shift(item.name, 3)
-        for (let i=0; i<headers.length; i++){
-            let val = item[headers[i]] && item[headers[i]].count ||0;
-            counts[i] = counts[i]||0 + val;
-        }
-    })
-    
-    Data.forEach(item => {
-        let out = shift(item.name, 3)   // name
-        for (let i=0; i<headers.length; i++) {
-            let val = item[headers[i]] && item[headers[i]].count ||0;
-            let prev = item[headers[i-1]];
-            prev = prev && prev.count ||0;
-            let count = counts[i];
-            let count_prev = counts[i-1]||0;
-            let per = (val&&prev)? Math.round(100*(val-prev)/prev): 0;
-            // let per = (val&&prev)? Math.round(100*(val/count-prev/count_prev)/(prev/count_prev)): 0;
-            if (per>0) per = '+' + per;
-            
-            if (headers[i] != 'name')
-                out += shift((val||' ') + '' + (per||''), 2);
-        }
-        console.log(out);
-    })
-    
-    function shift(str, count) {
-        count = count - Math.floor(str.length / 8); // TAB length
-        for (let i=0; i<count; i++)
-            str += '\t';
-        return str;
-    }
+function print_html(Data) {
+    let headers = getHeaders(Data);
+    headers = [headers[0], ...headers.slice(1).reverse()];
+    printHtml(headers, Data);
 }
 
 // get sorted headers
@@ -222,8 +215,8 @@ function update_item(item, {count, salary}, DATE, Data){
     }
 }
 
-async function get_count(name, country) {
-    const stat = await fetchStat[country](name);
+async function get_count(name, country, debug) {
+    const stat = await fetchStat[country](name, debug)
     
     console.log(stat);
 

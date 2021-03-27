@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node ./getv.js --update",
     "sort": "node ./getv.js --sort",
-    "print": "node ./getv.js"
+    "print": "node ./getv.js --print"
   },
   "author": "",
   "license": "ISC",
